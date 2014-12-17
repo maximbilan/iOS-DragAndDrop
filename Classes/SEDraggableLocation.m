@@ -6,13 +6,15 @@
 //  Copyright (c) 2012 robot bubble bath LLC. All rights reserved.
 //
 
-#import <QuartzCore/QuartzCore.h>
 #import "SEDraggableLocation.h"
 #import "SEDraggable.h"
 
 const NSInteger SEDraggableLocationPositionDetermineAutomatically = -1;
 
 @interface SEDraggableLocation ()
+{
+    
+}
 
 @property (nonatomic, readwrite, strong) UIView *highlightView;
 
@@ -110,6 +112,11 @@ const NSInteger SEDraggableLocationPositionDetermineAutomatically = -1;
   self.fillHorizontallyFirst = YES;
   self.allowRows = YES;
   self.allowColumns = YES;
+    self.variableSizedObjects = NO;
+    self.centerVariableSizedObjects = NO;
+    self.shouldVerticallyCenterObjects = NO;
+    self.shouldFillRightToLeft = NO;
+    self.recalculatePositions = YES;
 }
 
 - (CGColorRef) highlightColor {
@@ -206,30 +213,171 @@ const NSInteger SEDraggableLocationPositionDetermineAutomatically = -1;
 #pragma mark- Geometry helpers
 
 - (CGPoint) calculateCenterOfDraggableObject:(SEDraggable *)object inPosition:(NSInteger)position {
-  CGPoint point;
+    
+    if (self.variableSizedObjects) {
+        
+        CGPoint point;
+        
+        CGRect rect = self.objectGutterBounds.frame;
+        
+        NSInteger row = 0;
+        
+        CGFloat xOffset = 0;
+        CGFloat rowWidth = 0;
+        CGFloat mediumHeight = 0;
+        
+        __block NSMutableArray *rowsData = [[NSMutableArray alloc] init];
+        void (^addRowsData)(int, float, float) =
+        ^(int count, float rowWidth, float maxHeight) {
+            NSDictionary *dict = @{ @"count" : @(count),
+                                    @"rowWidth" : @(rowWidth),
+                                    @"maxHeight" : @(maxHeight)
+                                    };
+            [rowsData addObject:dict];
+        };
+        
+        CGFloat totalHeight = 0;
+        for (SEDraggable *tempObject in self.containedObjects) {
+            totalHeight += tempObject.frame.size.height;
+        }
+        mediumHeight = totalHeight / self.containedObjects.count;
+        
+        CGFloat maxHeight = 0;
+        for (int i=0; i<self.containedObjects.count; i++) {
+            
+            SEDraggable *tempObject = [self.containedObjects objectAtIndex:i];
+            
+            if (tempObject.frame.size.height > maxHeight) {
+                maxHeight = tempObject.frame.size.height;
+            }
+            
+            if (![tempObject isEqual:object]) {
+            
+                if (xOffset+tempObject.frame.size.width > rect.size.width) {
+                    
+                    row++;
+                    xOffset = tempObject.frame.size.width + self.marginBetweenX;
+                    
+                    addRowsData(i-1, rowWidth - self.marginBetweenX, maxHeight);
+                    rowWidth = xOffset;
+                    
+                }else{
+                    if (self.useMarginForVariableSizedObjects) {
+                        xOffset += tempObject.frame.size.width + self.marginBetweenX;
+                    }
+                    else {
+                        xOffset += tempObject.frame.size.width;
+                    }
+                    
+                    rowWidth += (tempObject.frame.size.width + self.marginBetweenX);
+                }
+                
+            }else{
+                
+                if (xOffset+tempObject.frame.size.width > rect.size.width) {
+                    
+                    row++;
+                    xOffset = 0;
+                    addRowsData(i-1, rowWidth - self.marginBetweenX, maxHeight);
+                    addRowsData(i, tempObject.frame.size.width, maxHeight);
+                }
+                else {
+                    addRowsData(i, rowWidth + tempObject.frame.size.width, maxHeight);
+                }
+                
+                break;
+            }
+        }
+        
+        self.alignmentData = [NSArray arrayWithArray:rowsData];
+        
+        if (row < self.marginLeftArray.count && !self.centerVariableSizedObjects) {
+            self.marginLeft = [[self.marginLeftArray objectAtIndex:row] floatValue];
+        }
+        
+        NSInteger totalRows = roundf(rect.size.height/object.frame.size.height);
+        CGFloat rowHeight = rect.size.height/totalRows;
+        
+        if (self.shouldFillRightToLeft) {
+            if (self.useMarginForVariableSizedObjects) {
+                point.x = (self.marginRight + rect.origin.x + rect.size.width) - xOffset - object.frame.size.width/2 - self.marginLeft;
+            }
+            else {
+                point.x = (rect.origin.x + rect.size.width) - xOffset - object.frame.size.width/2;
+            }
+        }else{
+            if (self.useMarginForVariableSizedObjects) {
+                point.x = self.marginLeft + rect.origin.x + xOffset + object.frame.size.width/2;
+            }
+            else {
+                point.x = rect.origin.x + xOffset + object.frame.size.width/2;
+            }
+        }
+        if (self.useMarginForVariableSizedObjects) {
+            if (self.shouldVerticallyCenterObjects) {
+                if (self.verticalCenterVariableSizedObjects) {
+                    point.y = rect.origin.y + mediumHeight * 0.5 + ((mediumHeight + self.marginBetweenY) * row) + self.marginTop;
+                }
+                else {
+                    CGFloat centerOffset = (rect.size.height - ((mediumHeight + self.marginBetweenY) * row)) * 0.5;
+                    point.y = rect.origin.y + ((mediumHeight + self.marginBetweenY + mediumHeight/2) * row) + self.marginTop + centerOffset;
+                }
+            }
+            else {
+                point.y = rect.origin.y + ((rowHeight + self.marginBetweenY) * row) + rowHeight/2 + self.marginTop;
+            }
+        }
+        else {
+            point.y = rect.origin.y + (rowHeight*row) + rowHeight/2;
+        }
+        
+        return point;
+        
+    }else{
+        
+        CGPoint point;
+        
+        CGRect rect = self.objectGutterBounds.frame;
+        int objectsPerRow = floor(((rect.size.width - self.marginLeft - self.marginRight - (2 * self.marginBetweenX)) / self.objectWidth));
+        int objectsPerCol = floor(((rect.size.height - self.marginTop - self.marginBottom - (2 * self.marginBetweenY)) / self.objectHeight));
+        int row, col;
+        
+        // prevent divide-by-zero errors
+        if (objectsPerRow == 0) objectsPerRow = 1;
+        if (objectsPerCol == 0) objectsPerCol = 1;
+        
+        if (self.fillHorizontallyFirst) {
+            col = position % objectsPerRow;
+            row = (position - col) / objectsPerRow;
+        }
+        else {
+            row = position % objectsPerCol;
+            col = (position - row) / objectsPerCol;
+        }
+        
+        if (self.shouldFillRightToLeft) {
+            point.x = (rect.origin.x + rect.size.width) - (self.marginRight + (col * (self.marginBetweenX + self.objectWidth)) + (self.objectWidth / 2));
+        }else{
+            if (objectsPerRow == 1) {
+                point.x = self.objectGutterBounds.center.x;
+            }else{
+                point.x = rect.origin.x + self.marginLeft + (col * (self.marginBetweenX + self.objectWidth)) + (self.objectWidth / 2);
+            }
+        }
+        
+        if (self.shouldVerticallyCenterObjects) {
+            int totalObjects = self.containedObjects.count;
+            int totalRows = ceilf(((CGFloat)totalObjects)/objectsPerRow);
+            CGFloat heightPerRow = rect.size.height/totalRows;
+            point.y = heightPerRow*row + (heightPerRow/2);
 
-  CGRect rect = self.objectGutterBounds.frame;
-  int objectsPerRow = floor(((rect.size.width - self.marginLeft - self.marginRight - (2 * self.marginBetweenX)) / self.objectWidth));
-  int objectsPerCol = floor(((rect.size.height - self.marginTop - self.marginBottom - (2 * self.marginBetweenY)) / self.objectHeight));
-  int row, col;
-  
-  // prevent divide-by-zero errors
-  if (objectsPerRow == 0) objectsPerRow = 1;
-  if (objectsPerCol == 0) objectsPerCol = 1;
-  
-  if (self.fillHorizontallyFirst) {
-    col = position % objectsPerRow;
-    row = (position - col) / objectsPerRow;
-  }
-  else {
-    row = position % objectsPerCol;
-    col = (position - row) / objectsPerCol;
-  }
-  
-  point.x = rect.origin.x + self.marginLeft + (col * (self.marginBetweenX + self.objectWidth)) + (self.objectWidth / 2);
-  point.y = rect.origin.y + self.marginTop  + (row * (self.marginBetweenY + self.objectHeight)) + (self.objectHeight / 2);
-  
-  return point;
+        }else{
+            point.y = rect.origin.y + self.marginTop  + (row * (self.marginBetweenY + self.objectHeight)) + (self.objectHeight / 2);
+        }
+        
+        return point;
+
+    }
 }
 
 - (CGPoint) getAcceptableWindowCoordsForDraggableObject:(SEDraggable *)object inPosition:(NSInteger)position {
@@ -277,6 +425,10 @@ const NSInteger SEDraggableLocationPositionDetermineAutomatically = -1;
       if ([myself.delegate respondsToSelector:@selector(draggableLocation:didMoveObject:)])
         [myself.delegate draggableLocation:myself didMoveObject:object];
     }
+
+    if (self.centerVariableSizedObjects) {
+        [self centerObjects];
+    }
   };
   
   void (^blockCompletion)(BOOL) = ^(BOOL finished) {
@@ -284,14 +436,17 @@ const NSInteger SEDraggableLocationPositionDetermineAutomatically = -1;
       [myself.delegate draggableLocationDidRecalculateObjectPositions:myself];
   };
   
-  if (self.shouldAnimateObjectAdjustments) {
-    [UIView animateWithDuration:self.animationDuration delay:self.animationDelay options:self.animationOptions
-                     animations:blockRecalculate completion:blockCompletion];
-  }
-  else {
-    blockRecalculate();
-    blockCompletion(YES);
-  }
+
+    if (self.recalculatePositions) {
+        if (self.shouldAnimateObjectAdjustments) {
+            [UIView animateWithDuration:self.animationDuration delay:self.animationDelay options:self.animationOptions
+                             animations:blockRecalculate completion:blockCompletion];
+        }
+        else {
+            blockRecalculate();
+            blockCompletion(YES);
+        }
+    }
 }
 
 - (BOOL) pointIsInsideResponsiveBounds:(CGPoint)point {
@@ -318,6 +473,11 @@ const NSInteger SEDraggableLocationPositionDetermineAutomatically = -1;
 - (void) acceptDraggableObject:(SEDraggable *)draggable
                    entryMethod:(SEDraggableLocationEntryMethod)entryMethod
                       animated:(BOOL)animated {
+    
+    if ([self.delegate respondsToSelector:@selector(draggableLocation:willAcceptObject:entryMethod:)]){
+        [self.delegate draggableLocation:self willAcceptObject:draggable entryMethod:entryMethod];
+    }
+
   /**
    * either:
    * 1. (existing draggable case) the draggable has a superview (i.e. previous location) and also coordinates,
@@ -359,6 +519,11 @@ const NSInteger SEDraggableLocationPositionDetermineAutomatically = -1;
 
   CGPoint destinationPointInLocalCoords = [self convertPoint:destinationPointInWindowCoords fromView:nil];
   
+  if ((self.centerVariableSizedObjects || !self.recalculatePositions) && entryMethod == SEDraggableLocationEntryMethodWantsToSnapBack) {
+      destinationPointInLocalCoords.x = draggable.firstX;
+      destinationPointInLocalCoords.y = draggable.firstY;
+  }
+    
   __block SEDraggableLocation *myself = self;
   __block SEDraggable *blockDraggable = draggable;
   void (^completionBlock)(BOOL) = ^(BOOL finished) {
@@ -374,13 +539,18 @@ const NSInteger SEDraggableLocationPositionDetermineAutomatically = -1;
       [myself.delegate draggableLocation:myself didAcceptObject:blockDraggable entryMethod:entryMethod];
   };
   
-  if (animated) {
-    [draggable snapCenterToPoint:destinationPointInLocalCoords animated:animated completion:completionBlock];
-  }
-  else {
-    draggable.center = destinationPointInLocalCoords;
-    completionBlock(YES);
-  }
+    if (!self.recalculatePositions) {
+        [draggable snapCenterToPoint:destinationPointInLocalCoords animated:animated completion:nil];
+    }
+    else {
+        if (animated) {
+            [draggable snapCenterToPoint:destinationPointInLocalCoords animated:animated completion:completionBlock];
+        }
+        else {
+            draggable.center = destinationPointInLocalCoords;
+            completionBlock(YES);
+        }
+    }
 }
 
 - (void) refuseDraggableObject:(SEDraggable *)draggable
@@ -539,4 +709,33 @@ const NSInteger SEDraggableLocationPositionDetermineAutomatically = -1;
 
     return theCopy;
 }
+
+- (void)centerObjects
+{
+    CGRect frame = self.objectGutterBounds.frame;
+        
+    CGFloat sumHeight = 0;
+    for (NSInteger i = 0; i < self.alignmentData.count; ++i) {
+        sumHeight += [[[self.alignmentData objectAtIndex:i] objectForKey:@"maxHeight"] floatValue];
+    }
+    CGFloat centerVerticalOffset = (frame.size.height - sumHeight - self.marginTop - self.marginBottom - (self.marginBetweenY * (self.alignmentData.count - 1))) * 0.5;
+    CGFloat yOffset = 0;
+    NSInteger prevIndex = 0;
+    for (NSInteger i = 0; i < self.alignmentData.count; ++i) {
+        NSInteger countInRow = [[[self.alignmentData objectAtIndex:i] objectForKey:@"count"] integerValue];
+        CGFloat rowWidth = [[[self.alignmentData objectAtIndex:i] objectForKey:@"rowWidth"] floatValue];
+        CGFloat centerOffset = (frame.size.width - rowWidth) * 0.5;
+        for (NSInteger j = prevIndex; j <= countInRow && self.containedObjects.count > 0; ++j) {
+            SEDraggable *obj = [self.containedObjects objectAtIndex:j];
+            obj.frame = CGRectMake(obj.frame.origin.x + centerOffset,
+                                   self.verticalCenterVariableSizedObjects ? (centerVerticalOffset + yOffset) : obj.frame.origin.y,
+                                   obj.frame.size.width,
+                                   obj.frame.size.height);
+        }
+        CGFloat maxHeight = [[[self.alignmentData objectAtIndex:i] objectForKey:@"maxHeight"] floatValue];
+        yOffset += (maxHeight + self.marginBetweenY);
+        prevIndex = countInRow + 1;
+    }
+}
+
 @end

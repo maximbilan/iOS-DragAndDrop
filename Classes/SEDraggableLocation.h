@@ -20,6 +20,7 @@ typedef enum {
 
 @protocol SEDraggableLocationEventResponder <NSObject>
   @optional
+    - (void) draggableLocation:(SEDraggableLocation *)location willAcceptObject:(SEDraggable *)object entryMethod:(SEDraggableLocationEntryMethod)method;
     - (void) draggableLocation:(SEDraggableLocation *)location didAcceptObject:(SEDraggable *)object entryMethod:(SEDraggableLocationEntryMethod)method;
     - (void) draggableLocation:(SEDraggableLocation *)location didRefuseObject:(SEDraggable *)object entryMethod:(SEDraggableLocationEntryMethod)method;
     - (void) draggableLocation:(SEDraggableLocation *)location didMoveObject:(SEDraggable *)object;
@@ -82,6 +83,8 @@ typedef enum {
 @property (nonatomic, readwrite) BOOL shouldKeepObjectsArranged;
 @property (nonatomic, readwrite) BOOL shouldAnimateObjectAdjustments;
 @property (nonatomic, readwrite) BOOL shouldHighlightOnDragOver;
+@property (nonatomic, readwrite) BOOL shouldVerticallyCenterObjects;
+@property (nonatomic, readwrite) BOOL shouldFillRightToLeft;
 @property (nonatomic, readwrite) CGColorRef highlightColor;
 @property (nonatomic, readwrite) CGFloat highlightOpacity;
 @property (nonatomic, readwrite) CGFloat animationDuration;
@@ -90,9 +93,16 @@ typedef enum {
 @property (nonatomic, readwrite) BOOL fillHorizontallyFirst;
 @property (nonatomic, readwrite) BOOL allowRows;
 @property (nonatomic, readwrite) BOOL allowColumns;
+@property (nonatomic, readwrite) BOOL variableSizedObjects;
 @property (nonatomic, readwrite, unsafe_unretained) id <SEDraggableLocationEventResponder> delegate;
 @property (nonatomic, readwrite, strong) NSMutableArray *containedObjects;
 
+@property (nonatomic, readwrite) BOOL centerVariableSizedObjects;
+@property (nonatomic, readwrite) BOOL verticalCenterVariableSizedObjects;
+@property (nonatomic, readwrite) BOOL useMarginForVariableSizedObjects;
+@property (nonatomic, readwrite) BOOL recalculatePositions;
+@property (nonatomic, readwrite, strong) NSArray *alignmentData;
+@property (nonatomic, readwrite, strong) NSArray *marginLeftArray;
 
 - (void) removeDraggableObject:(SEDraggable *)draggable;
 - (void) recalculateAllObjectPositions;
@@ -109,5 +119,7 @@ typedef enum {
 // movement handlers
 - (void) draggableObjectDidMoveWithinBounds:(SEDraggable *)draggable;
 - (void) draggableObjectDidMoveOutsideBounds:(SEDraggable *)draggable;
+
+- (void)centerObjects;
 
 @end

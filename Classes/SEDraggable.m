@@ -7,7 +7,6 @@
 //
 
 #import "SEDraggable.h"
-#import "SEDraggableLocation.h"
 
 @implementation UIView (Helpr)
 - (CGPoint) getCenterInWindowCoordinates {
@@ -60,6 +59,7 @@
   self = [self initWithFrame:imageView.frame];
   if (self) {
     imageView.frame = CGRectMake(0, 0, imageView.frame.size.width, imageView.frame.size.height);
+    imageView.tag = 1;
     [self addSubview:imageView];
   }
   return self;
